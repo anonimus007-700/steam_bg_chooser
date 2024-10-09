@@ -1,5 +1,7 @@
 import flet as ft
 import os
+import numpy as np
+import base64
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -10,29 +12,50 @@ from selenium.webdriver.common.by import By
 
 from screeninfo import get_monitors
 from time import sleep
+from PIL import Image as image
+from io import BytesIO
 from file_set import *
 
 
 monitor = get_monitors()
 
 chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--start-maximized")
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument('--window-size=1920,1080')
+chrome_options.add_argument("--headless=new")
 # chrome_options.add_argument(f"--window-size={monitor[0].width},{monitor[0].height}")
-chrome_options.add_argument(f"--window-size=1920,1080")
+# chrome_options.add_argument(f"--window-size=1920,1080")
 chrome_options.add_argument("--allow-file-access-from-files")
 
 
 assets_dir = os.path.join(os.getcwd(), 'assets')
-
+buff = BytesIO()
 
 def main(page: ft.Page):
+    def get_out_img():
+        image_path = f'{assets_dir}\\screenshot.png'
+        
+        pil_photo = image.open(image_path)
+
+        arr = np.asarray(pil_photo)
+        pil_img = image.fromarray(arr)
+        buff = BytesIO()
+        pil_img.save(buff, format="PNG")
+
+        newstring = base64.b64encode(buff.getvalue()).decode("utf-8")
+        image_out.src_base64 = newstring
+
+        page.update()
+    
     def image_pick_event(e: ft.FilePickerResultEvent):
         photo_url.value = e.files[0].path
         page.update()
     
     def submit(e):
+        page.open(open_progressed_dialog)
+
         download_page_with_css(url.value)
         pic_resize(photo_url.value)
         virtina_resize(assets_dir + '\\bg.png')
@@ -86,14 +109,19 @@ def main(page: ft.Page):
         driver.save_screenshot(screenshot_path)
         
         driver.quit()
+        page.close(open_progressed_dialog)
         
-    
+        get_out_img()
+        page.open(open_result_dialog)
+  
     page.title = 'Steam BG chooser'
     page.theme = ft.ThemeMode.DARK
     page.theme = ft.Theme(color_scheme_seed='indigo')
     
     file_picker = ft.FilePicker(on_result=image_pick_event)
     page.overlay.append(file_picker)
+    
+    image_out = ft.Image()
 
     url = ft.TextField(label="Enter profile URL", hint_text="https://steamcommunity.com/id/VerhovnaVlada/")
     photo = ft.ElevatedButton("Choose files...",
@@ -101,6 +129,22 @@ def main(page: ft.Page):
     photo_url = ft.TextField(label="Enter photo URL",)
     submit_but = ft.ElevatedButton("Submit", on_click=submit)
     vitrina_visible = ft.Checkbox(label="Is the window transparent?", value=False)
+    
+    open_progressed_dialog = ft.CupertinoAlertDialog(
+                                content=ft.Column(
+                                    [ft.ProgressRing(), ft.Text("In process...")],
+                                    alignment=ft.MainAxisAlignment.CENTER,
+                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                modal=True
+                            )
+    open_result_dialog = ft.AlertDialog(
+                content=ft.Column(
+                    [image_out],
+                    # horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                actions=[ft.TextButton("OK", on_click=lambda e: page.close(open_result_dialog))],
+            )
     
     page.add(
         ft.Row(
@@ -129,5 +173,5 @@ def main(page: ft.Page):
         )
     )
     
-
-ft.app(main)
+if __name__ == '__main__':
+    ft.app(main)
